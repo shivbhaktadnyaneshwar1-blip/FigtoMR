@@ -1,0 +1,75 @@
+{
+  "name": "figto-mr",
+  "version": "0.1.0",
+  "description": "Figma → React studio: UI + Express API driving a Gemini ADK agent into a configurable target git repo.",
+  "type": "module",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "bin": {
+    "figto-mr": "./dist/bin/cli.js",
+    "figto-mr-server": "./dist/bin/server.js"
+  },
+  "files": [
+    "dist",
+    "ui/dist",
+    "mcp-config.json",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && npm run build:ui",
+    "build:ui": "vite build --config ui/vite.config.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "dev": "tsx bin/cli.ts",
+    "dev:server": "tsx bin/server.ts",
+    "dev:server:inspect": "tsx --inspect=9229 bin/server.ts",
+    "dev:ui": "vite --config ui/vite.config.ts",
+    "dev:all": "concurrently -k -n api,ui -c cyan,magenta \"npm run dev:server\" \"npm run dev:ui\"",
+    "start": "node dist/bin/cli.js",
+    "start:server": "node dist/bin/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "adk": "npx @google/adk-devtools run agent.ts",
+    "adk:web": "npx @google/adk-devtools web"
+  },
+  "keywords": ["figma", "mcp", "adk", "gemini", "react"],
+  "license": "MIT",
+  "dependencies": {
+    "@google/adk": "^2.0.0",
+    "@modelcontextprotocol/sdk": "^1.18.0",
+    "chalk": "^5.6.0",
+    "commander": "^14.0.0",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.1",
+    "ora": "^8.2.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "zod": "^4.1.5"
+  },
+  "overrides": {
+    "@opentelemetry/context-async-hooks": "2.11.0",
+    "@opentelemetry/core": "2.11.0",
+    "@opentelemetry/resources": "2.11.0",
+    "@opentelemetry/sdk-metrics": "2.11.0",
+    "@opentelemetry/sdk-trace": "2.11.0",
+    "@opentelemetry/sdk-trace-base": "2.11.0",
+    "@opentelemetry/sdk-trace-node": "2.11.0"
+  },
+  "devDependencies": {
+    "@google/adk-devtools": "^2.0.0",
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.2",
+    "concurrently": "^9.2.1",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.5",
+    "vitest": "^3.2.4"
+  }
+}

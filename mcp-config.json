@@ -1,0 +1,15 @@
+{
+  "servers": {
+    "figma": {
+      "enabled": true,
+      "transport": "http",
+      "url": "http://127.0.0.1:3845/mcp",
+      "toolAliases": {
+        "getDesignContext": ["get_design_context"],
+        "getMetadata": ["get_metadata"],
+        "getVariables": ["get_variable_defs"],
+        "getScreenshot": ["get_screenshot"]
+      }
+    }
+  }
+}
