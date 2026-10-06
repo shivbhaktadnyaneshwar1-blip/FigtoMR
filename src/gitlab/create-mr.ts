@@ -19,6 +19,14 @@ export interface PrepareBranchInput {
   readonly branchName: string;
 }
 
+export type GitHost = 'github' | 'gitlab';
+
+export function parseGitHost(value: unknown): GitHost {
+  if (value === undefined || value === null || value === '' || value === 'gitlab') return 'gitlab';
+  if (value === 'github') return 'github';
+  throw new Error('gitHost must be "github" or "gitlab".');
+}
+
 export interface OpenMergeRequestInput {
   readonly repoPath: string;
   readonly env: StudioEnv;
@@ -29,6 +37,8 @@ export interface OpenMergeRequestInput {
   /** Required: only these relative paths are staged (never `git add -A`). */
   readonly files: readonly string[];
   readonly targetProfile?: Pick<TargetFrontendProfile, 'componentRoot'>;
+  /** Studio toggle. Defaults to GitLab. */
+  readonly gitHost?: GitHost;
 }
 
 export interface CreateMergeRequestResult {
@@ -54,7 +64,10 @@ function slugify(value: string): string {
 }
 
 export function buildFeatureBranchName(componentName?: string): string {
-  const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
+  const stamp = new Date()
+    .toISOString()
+    .replace(/[-:TZ.]/g, '')
+    .slice(0, 14);
   const slug = componentName ? slugify(componentName) : 'figma-component';
   return `studio/${slug}-${stamp}`;
 }
@@ -77,13 +90,7 @@ export async function prepareFeatureBranch(input: PrepareBranchInput): Promise<s
   let stashed = false;
 
   if (dirty) {
-    await git(repoPath, [
-      'stash',
-      'push',
-      '-u',
-      '-m',
-      `figto-mr-prepare:${branchName}`,
-    ]);
+    await git(repoPath, ['stash', 'push', '-u', '-m', `figto-mr-prepare:${branchName}`]);
     stashed = true;
     logger.info(`Stashed local the target repo changes before switching to ${branchName}`);
   }
@@ -146,9 +153,65 @@ async function restoreStashedStudioChanges(repoPath: string, branchName: string)
   }
 }
 
+export function buildReviewRequest(input: {
+  readonly gitHost: GitHost;
+  readonly env: Pick<StudioEnv, 'GITLAB_API_URL' | 'GITHUB_API_URL'>;
+  readonly token: string;
+  readonly projectPath: string;
+  readonly branchName: string;
+  readonly baseBranch: string;
+  readonly title: string;
+  readonly description: string;
+}): { url: string; init: RequestInit } {
+  if (input.gitHost === 'github') {
+    const parts = input.projectPath.split('/').filter(Boolean);
+    if (parts.length !== 2) {
+      throw new Error('GIT_REMOTE_PROJECT must be owner/repo for a GitHub pull request.');
+    }
+    const [owner, repo] = parts;
+    return {
+      url: `${input.env.GITHUB_API_URL.replace(/\/$/, '')}/repos/${owner}/${repo}/pulls`,
+      init: {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${input.token}`,
+          Accept: 'application/vnd.github+json',
+          'Content-Type': 'application/json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        body: JSON.stringify({
+          title: input.title,
+          body: input.description,
+          head: input.branchName,
+          base: input.baseBranch,
+        }),
+      },
+    };
+  }
+
+  const project = encodeURIComponent(input.projectPath);
+  return {
+    url: `${input.env.GITLAB_API_URL.replace(/\/$/, '')}/projects/${project}/merge_requests`,
+    init: {
+      method: 'POST',
+      headers: {
+        'PRIVATE-TOKEN': input.token,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        source_branch: input.branchName,
+        target_branch: input.baseBranch,
+        title: input.title,
+        description: input.description,
+        remove_source_branch: true,
+      }),
+    },
+  };
+}
+
 /**
- * Commit agent writes on the current feature branch, push, and open a GitLab MR
- * against the target repo (`your target repo`).
+ * Commit agent writes on the current feature branch, push, and open a GitHub pull
+ * request or GitLab merge request for the selected host.
  *
  * Only stages the provided component-authoring paths — never the whole working tree.
  */
@@ -158,17 +221,21 @@ export async function commitAndOpenMergeRequest(
   const { repoPath, env, branchName, commitMessage, title, description } = input;
   const remote = targetGitRemote(env);
   const baseBranch = gitMrTargetBranch(env) || targetGitBaseBranch(env);
-  const token = env.GITLAB_TOKEN;
+  const gitHost = input.gitHost ?? 'gitlab';
+  const token = (gitHost === 'github' ? env.GITHUB_TOKEN : env.GITLAB_TOKEN)?.trim();
+  const reviewName = gitHost === 'github' ? 'pull request' : 'merge request';
 
   if (!token) {
-    throw new Error('GITLAB_TOKEN is required to create a merge request.');
+    throw new Error(
+      gitHost === 'github'
+        ? 'GITHUB_TOKEN is required to create a pull request.'
+        : 'GITLAB_TOKEN is required to create a merge request.',
+    );
   }
 
   const files = [...new Set(input.files.map((f) => f.replace(/\\/g, '/')))].filter(Boolean);
   if (files.length === 0) {
-    throw new Error(
-      'No generated component files were written before opening an MR.',
-    );
+    throw new Error('No generated component files were written before opening an MR.');
   }
 
   const rejected = files.filter((file) => !isAllowedStudioMrPath(file, input.targetProfile));
@@ -178,16 +245,14 @@ export async function commitAndOpenMergeRequest(
     );
   }
 
-  const hasComponentFolder = files.some(
-    (file) =>
-      file.startsWith(
-        `${(input.targetProfile?.componentRoot ?? 'src/components').replace(/\/$/, '')}/`,
-      ),
+  const hasComponentFolder = files.some((file) =>
+    file.startsWith(
+      `${(input.targetProfile?.componentRoot ?? 'src/components').replace(/\/$/, '')}/`,
+    ),
   );
   if (!hasComponentFolder) {
     throw new Error(
-      'MR must include sources under the detected component root. ' +
-        `Got: ${files.join(', ')}`,
+      'MR must include sources under the detected component root. ' + `Got: ${files.join(', ')}`,
     );
   }
 
@@ -205,40 +270,45 @@ export async function commitAndOpenMergeRequest(
 
   const projectPath = gitRemoteProject(env);
   if (!projectPath) {
-    throw new Error('Set GIT_REMOTE_PROJECT (e.g. org/repo) to open a merge request.');
+    throw new Error(`Set GIT_REMOTE_PROJECT (e.g. org/repo) to open a ${reviewName}.`);
   }
-  const project = encodeURIComponent(projectPath);
-  const response = await fetch(`${env.GITLAB_API_URL}/projects/${project}/merge_requests`, {
-    method: 'POST',
-    headers: {
-      'PRIVATE-TOKEN': token,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      source_branch: branchName,
-      target_branch: baseBranch,
-      title,
-      description,
-      remove_source_branch: true,
-    }),
+  const request = buildReviewRequest({
+    gitHost,
+    env,
+    token,
+    projectPath,
+    branchName,
+    baseBranch,
+    title,
+    description,
   });
+  const response = await fetch(request.url, request.init);
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`GitLab MR create failed (${response.status}): ${body}`);
+    throw new Error(
+      `${gitHost === 'github' ? 'GitHub pull request' : 'GitLab merge request'} create failed (${response.status}): ${body}`,
+    );
   }
 
   const payload = (await response.json()) as {
-    iid: number;
-    web_url: string;
+    iid?: number;
+    number?: number;
+    web_url?: string;
+    html_url?: string;
   };
+  const mrIid = payload.iid ?? payload.number;
+  const webUrl = payload.web_url ?? payload.html_url;
+  if (!mrIid || !webUrl) {
+    throw new Error(`${reviewName} response is missing a URL.`);
+  }
 
-  logger.info(`Opened MR !${payload.iid}: ${payload.web_url} (${files.length} file(s))`);
+  logger.info(`Opened ${reviewName} !${mrIid}: ${webUrl} (${files.length} file(s))`);
   return {
     branchName,
-    mrUrl: payload.web_url,
-    mrIid: payload.iid,
-    webUrl: payload.web_url,
+    mrUrl: webUrl,
+    mrIid,
+    webUrl,
   };
 }
 
@@ -279,6 +349,8 @@ export async function commitAndPushChanges(input: {
   await git(repoPath, ['commit', '-m', commitMessage]);
   const commitSha = await git(repoPath, ['rev-parse', 'HEAD']);
   await git(repoPath, ['push', remote, branchName]);
-  logger.info(`Pushed refine commit ${commitSha.slice(0, 8)} to ${branchName} (${files.length} file(s))`);
+  logger.info(
+    `Pushed refine commit ${commitSha.slice(0, 8)} to ${branchName} (${files.length} file(s))`,
+  );
   return { pushed: true, commitSha };
 }

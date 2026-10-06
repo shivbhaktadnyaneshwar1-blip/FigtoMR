@@ -1,6 +1,6 @@
 # FigtoMR
 
-FigtoMR turns a Figma frame into a reviewable React/TypeScript component proposal. Review and refine the proposal in the Studio, write it into a local target repository, and optionally create a GitLab merge request containing only the generated component folder.
+FigtoMR turns a Figma frame into a reviewable React/TypeScript component proposal. Review and refine the proposal in the Studio, write it into a local target repository, and optionally open a GitHub pull request or GitLab merge request containing only the generated component folder.
 
 It is repository-aware rather than design-system-specific: it detects the target repository's component location, scripts, formatter, and React dependency before generation.
 
@@ -11,7 +11,7 @@ It is repository-aware rather than design-system-specific: it detects the target
 - A Gemini API key (`GEMINI_API_KEY` or `GOOGLE_API_KEY`)
 - A local checkout of the React application that will receive generated components
 - Figma Desktop Dev Mode MCP, or another compatible Figma MCP endpoint with design-context and screenshot tools
-- Git installed in the target checkout; GitLab credentials only when creating merge requests
+- Git installed in the target checkout; a GitHub or GitLab token only when opening a review
 
 ## Install and configure
 
@@ -134,17 +134,18 @@ npm run dev -- "https://www.figma.com/design/FILE_KEY/Name?node-id=123-456" \
 
 Use `npm run dev -- --help` for all CLI options.
 
-## GitLab merge requests
+## GitHub pull requests and GitLab merge requests
 
-MR creation is optional. Configure the target checkout's Git remote and add:
+Opening a review is optional. In the Studio, turn on review creation and choose **GitHub** or **GitLab**. Approve uses that selection: GitHub calls `POST /repos/{owner}/{repo}/pulls` with `GITHUB_TOKEN`, and GitLab calls `POST /projects/{path}/merge_requests` with `GITLAB_TOKEN`.
 
 ```dotenv
+GITHUB_TOKEN=your_github_token
 GITLAB_TOKEN=your_gitlab_access_token
-GIT_REMOTE_PROJECT=group/project
+GIT_REMOTE_PROJECT=owner/repo
 GIT_MR_TARGET_BRANCH=main
 ```
 
-FigtoMR creates a branch, commits only the proposal-scoped component files, pushes it, and opens the merge request. Keep `STUDIO_DRY_RUN=true` (the default) until you are ready to write to the target repository.
+`GIT_REMOTE_PROJECT` is `owner/repo` for GitHub. GitLab can use a nested path such as `group/subgroup/project`. FigtoMR creates a branch, commits only the proposal-scoped component files, pushes it, and opens the selected review. Keep `STUDIO_DRY_RUN=true` (the default) until you are ready to write to the target repository.
 
 ## Environment reference
 
@@ -158,9 +159,10 @@ FigtoMR creates a branch, commits only the proposal-scoped component files, push
 | `STUDIO_PREVIEW_URL`                 | No                                  | Preview base URL; defaults to `http://localhost:5173`       |
 | `STUDIO_DRY_RUN`                     | No                                  | Defaults to `true`; use `false` to permit writes by default |
 | `STUDIO_LOG_LEVEL`                   | No                                  | `debug`, `info`, `warn`, `error`, or `silent`               |
-| `GITLAB_TOKEN`                       | For GitLab MRs                      | GitLab API access token                                     |
-| `GIT_REMOTE_PROJECT`                 | For GitLab MRs                      | GitLab project path, for example `group/project`            |
-| `GIT_MR_TARGET_BRANCH`               | No                                  | GitLab MR base branch                                       |
+| `GITHUB_TOKEN`                       | For GitHub pull requests            | GitHub API token                                            |
+| `GITLAB_TOKEN`                       | For GitLab merge requests           | GitLab API access token                                     |
+| `GIT_REMOTE_PROJECT`                 | For either review                   | `owner/repo`, or a GitLab group path                        |
+| `GIT_MR_TARGET_BRANCH`               | No                                  | Base branch for the pull request or merge request           |
 
 ## Commands
 

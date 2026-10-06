@@ -37,6 +37,7 @@ export function App() {
           draft={studio.chatDraft}
           busy={studio.chatBusy || studio.running}
           createMr={studio.createMr}
+          gitHost={studio.gitHost}
           figmaUrl={studio.figmaUrl}
           componentName={studio.componentName}
           selectedPath={studio.selectedPath}
@@ -49,6 +50,7 @@ export function App() {
           onFigmaUrlChange={studio.setFigmaUrl}
           onComponentNameChange={studio.setComponentName}
           onCreateMrChange={studio.setCreateMr}
+          onGitHostChange={studio.setGitHost}
           onSend={(e) => void studio.sendStudioChat(e)}
           onConfirmFigma={() => void studio.confirmFigmaFrame()}
           onRejectFigma={() => void studio.rejectFigmaFrame()}

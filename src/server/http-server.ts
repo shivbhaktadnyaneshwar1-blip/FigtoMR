@@ -32,6 +32,7 @@ import {
 import { streamInspectForConfirm } from './inspect-figma.js';
 import { deletePendingGenerate, getPendingGenerate } from './pending-generate-store.js';
 import { logger } from '../utils/logger.js';
+import { parseGitHost } from '../gitlab/create-mr.js';
 import { attachMergeRequestSession } from './mr-session.js';
 import { inspectTargetFrontendProfile } from '../target/frontend-profile.js';
 
@@ -259,16 +260,18 @@ export function createStudioApp(): Express {
   });
 
   app.post('/api/proposals/:id/approve', async (req: Request, res: Response) => {
-    const body = (req.body ?? {}) as { createMr?: boolean };
+    const body = (req.body ?? {}) as { createMr?: boolean; gitHost?: unknown };
     const wantsStream =
       String(req.headers.accept ?? '').includes('text/event-stream') || req.query.stream === '1';
 
     try {
       const env = loadEnv();
+      const gitHost = parseGitHost(body.gitHost);
       if (!wantsStream) {
         const result = await applyApprovedProposal({
           proposalId: String(req.params.id ?? ''),
           createMr: body.createMr,
+          gitHost,
           env,
         });
         logger.info(
@@ -290,6 +293,7 @@ export function createStudioApp(): Express {
       for await (const event of streamApplyApprovedProposal({
         proposalId: String(req.params.id ?? ''),
         createMr: body.createMr,
+        gitHost,
         env,
       })) {
         if (event.type === 'result') {

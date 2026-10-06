@@ -24,6 +24,7 @@ export function useStudioController() {
   const [figmaUrl, setFigmaUrl] = useState('');
   const [componentName, setComponentName] = useState('');
   const [createMr, setCreateMr] = useState(true);
+  const [gitHost, setGitHost] = useState<'github' | 'gitlab'>('gitlab');
   const [log, setLog] = useState('');
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [status, setStatus] = useState<StatusKind>('idle');
@@ -608,11 +609,7 @@ export function useStudioController() {
             const glyph =
               phase === 'start' ? '→' : phase === 'error' ? '✗' : phase === 'done' ? '✓' : '•';
             const sourceTag =
-              source === 'figma-mcp'
-                ? 'figma'
-                : source === 'agent'
-                  ? 'agent'
-                  : 'studio';
+              source === 'figma-mcp' ? 'figma' : source === 'agent' ? 'agent' : 'studio';
             setLog(
               (prev) =>
                 `${prev}${glyph} [${sourceTag}] ${label}${data.detail ? ` — ${data.detail}` : ''}\n`,
@@ -1103,13 +1100,15 @@ export function useStudioController() {
     pushChat({
       kind: 'text',
       role: 'user',
-      text: createMr ? 'Approve & open MR' : 'Approve (local)',
+      text: createMr ? `Approve & open ${gitHost === 'github' ? 'PR' : 'MR'}` : 'Approve (local)',
     });
     pushActivity({
       phase: 'start',
       source: 'studio',
       name: 'approve',
-      label: createMr ? 'Approve → fix lint/tests → open MR' : 'Approve → write files',
+      label: createMr
+        ? `Approve → open ${gitHost === 'github' ? 'pull request' : 'merge request'}`
+        : 'Approve → write files',
     });
     try {
       const response = await fetch(`/api/proposals/${proposal.proposalId}/approve`, {
@@ -1118,7 +1117,7 @@ export function useStudioController() {
           'Content-Type': 'application/json',
           Accept: 'text/event-stream',
         },
-        body: JSON.stringify({ createMr }),
+        body: JSON.stringify({ createMr, gitHost }),
       });
 
       if (!response.ok || !response.body) {
@@ -1495,6 +1494,8 @@ export function useStudioController() {
     setComponentName,
     createMr,
     setCreateMr,
+    gitHost,
+    setGitHost,
     activity,
     status,
     statusLabel,

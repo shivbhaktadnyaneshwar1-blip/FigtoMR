@@ -4,6 +4,7 @@ import {
   buildFeatureBranchName,
   commitAndOpenMergeRequest,
   prepareFeatureBranch,
+  type GitHost,
 } from '../gitlab/create-mr.js';
 import { studioPreviewUrl, type StudioEnv } from '../config/env.js';
 import { applyWritePlan, isAllowedStudioMrPath } from '../utils/file-writer.js';
@@ -68,7 +69,10 @@ export function buildProposedChanges(input: {
   const files: ProposedFileChange[] = [];
   for (const [path, contents] of Object.entries(input.generatedFiles)) {
     const componentRoot = input.componentRoot ?? 'src/components';
-    if (!isAllowedStudioMrPath(path, { componentRoot }) || !isComponentFile(path, contents, componentRoot)) {
+    if (
+      !isAllowedStudioMrPath(path, { componentRoot }) ||
+      !isComponentFile(path, contents, componentRoot)
+    ) {
       continue;
     }
     const action = existingAction(input.repoPath, path);
@@ -85,6 +89,7 @@ export function buildProposedChanges(input: {
 export async function* streamApplyApprovedProposal(input: {
   proposalId: string;
   createMr?: boolean;
+  gitHost?: GitHost;
   env: StudioEnv;
 }): AsyncGenerator<ApplyStreamEvent> {
   syncProposalFilesFromDisk(input.proposalId);
@@ -154,10 +159,12 @@ export async function* streamApplyApprovedProposal(input: {
     if (!branchName) {
       throw new Error('Missing branch name for MR.');
     }
-    yield { type: 'status', message: 'Opening merge request…' };
+    const reviewName = input.gitHost === 'github' ? 'pull request' : 'merge request';
+    yield { type: 'status', message: `Opening ${reviewName}…` };
     const mr = await commitAndOpenMergeRequest({
       repoPath,
       env: input.env,
+      gitHost: input.gitHost,
       branchName,
       files: written,
       targetProfile: proposal.targetProfile,
@@ -181,7 +188,7 @@ export async function* streamApplyApprovedProposal(input: {
     mrUrl = mr.mrUrl;
     mrIid = mr.mrIid;
     branchName = mr.branchName;
-    yield { type: 'status', message: `MR opened: ${mrUrl}` };
+    yield { type: 'status', message: `${reviewName} opened: ${mrUrl}` };
   }
 
   const playgroundUrl = name
@@ -190,9 +197,8 @@ export async function* streamApplyApprovedProposal(input: {
 
   let sessionId: string | undefined;
   if (name) {
-    const { saveStudioSession, updateStudioSession, getStudioSession } = await import(
-      './session-store.js'
-    );
+    const { saveStudioSession, updateStudioSession, getStudioSession } =
+      await import('./session-store.js');
     const existing = proposal.stagedSessionId
       ? getStudioSession(proposal.stagedSessionId)
       : undefined;
@@ -236,6 +242,7 @@ export async function* streamApplyApprovedProposal(input: {
 export async function applyApprovedProposal(input: {
   proposalId: string;
   createMr?: boolean;
+  gitHost?: GitHost;
   env: StudioEnv;
 }): Promise<ApplyProposalResult> {
   let result: ApplyProposalResult | undefined;

@@ -509,3 +509,29 @@ code {
 .proposal-title {
   font-size: 1.15rem;
 }
+
+.git-host-toggle {
+  display: inline-flex;
+  width: fit-content;
+  border: 1px solid var(--color-border-muted, #c5d0d8);
+  border-radius: var(--border-radius-md, 8px);
+  overflow: hidden;
+}
+
+.git-host-toggle button {
+  border: 0;
+  background: transparent;
+  padding: 0.35rem 0.8rem;
+  color: inherit;
+  cursor: pointer;
+}
+
+.git-host-toggle button.is-selected {
+  background: var(--color-accent, #057ba6);
+  color: #fff;
+}
+
+.git-host-toggle button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}

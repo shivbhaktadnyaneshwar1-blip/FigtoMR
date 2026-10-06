@@ -3,6 +3,7 @@ import type { ActivityItem, StudioStatus } from '../activity-reasoning';
 import type { StudioChatMessage } from '../chat-types';
 import type { ProposedFile } from '../studio-types';
 import { AgentActivity } from './AgentActivity';
+import { GitHostToggle, reviewLabel, type GitHost } from './GitHostToggle';
 import { TypedChatReply } from './TypedChatReply';
 
 type Props = {
@@ -10,6 +11,7 @@ type Props = {
   readonly draft: string;
   readonly busy: boolean;
   readonly createMr: boolean;
+  readonly gitHost: GitHost;
   readonly figmaUrl: string;
   readonly componentName: string;
   readonly selectedPath: string | undefined;
@@ -21,6 +23,7 @@ type Props = {
   readonly onFigmaUrlChange: (value: string) => void;
   readonly onComponentNameChange: (value: string) => void;
   readonly onCreateMrChange: (value: boolean) => void;
+  readonly onGitHostChange: (value: GitHost) => void;
   readonly onSend: (event?: FormEvent) => void;
   readonly onConfirmFigma: () => void | Promise<void>;
   readonly onRejectFigma: () => void | Promise<void>;
@@ -35,6 +38,7 @@ export function StudioChat({
   draft,
   busy,
   createMr,
+  gitHost,
   figmaUrl,
   componentName,
   selectedPath,
@@ -46,6 +50,7 @@ export function StudioChat({
   onFigmaUrlChange,
   onComponentNameChange,
   onCreateMrChange,
+  onGitHostChange,
   onSend,
   onConfirmFigma,
   onRejectFigma,
@@ -124,17 +129,20 @@ export function StudioChat({
               disabled={busy}
             />
             <span className="text-sm">
-              After Approve, open GitLab MR in <code>your target repo</code>
+              After Approve, open a {reviewLabel(gitHost)} in <code>your target repo</code>
             </span>
           </label>
+          {createMr ? (
+            <GitHostToggle value={gitHost} disabled={busy} onChange={onGitHostChange} />
+          ) : null}
         </div>
       ) : null}
 
       <div className="studio-chat-log" role="log" aria-live="polite">
         {messages.length === 0 && !showThinking ? (
           <p className="text-secondary margin-all-none">
-            Everything happens in this thread — progress, Figma screenshot, proposed files, playground
-            link, then refine. Paste a Figma node URL and generate.
+            Everything happens in this thread — progress, Figma screenshot, proposed files,
+            playground link, then refine. Paste a Figma node URL and generate.
           </p>
         ) : null}
 
@@ -147,6 +155,9 @@ export function StudioChat({
             onConfirmFigma={onConfirmFigma}
             onRejectFigma={onRejectFigma}
             onSelectPath={onSelectPath}
+            createMr={createMr}
+            gitHost={gitHost}
+            onGitHostChange={onGitHostChange}
             onApprove={onApprove}
             onRejectProposal={onRejectProposal}
           />
@@ -191,12 +202,18 @@ function ChatBubble({
   onConfirmFigma,
   onRejectFigma,
   onSelectPath,
+  createMr,
+  gitHost,
+  onGitHostChange,
   onApprove,
   onRejectProposal,
 }: {
   readonly message: StudioChatMessage;
   readonly isLatest: boolean;
   readonly selectedPath: string | undefined;
+  readonly createMr: boolean;
+  readonly gitHost: GitHost;
+  readonly onGitHostChange: (value: GitHost) => void;
   readonly onConfirmFigma: () => void | Promise<void>;
   readonly onRejectFigma: () => void | Promise<void>;
   readonly onSelectPath: (path: string) => void;
@@ -324,18 +341,21 @@ function ChatBubble({
           : message.visualMatch === false
             ? 'Visual compare still diverging — refine in chat or approve anyway. '
             : ''}
-        {message.createMr
-          ? 'Approve writes files, repairs lint/tests, and opens an MR.'
-          : 'Approve keeps the local stage (no MR).'}
+        {createMr
+          ? `Approve writes files and opens a ${reviewLabel(gitHost)}.`
+          : 'Approve keeps the local stage (no review request).'}
       </p>
+      {createMr ? (
+        <GitHostToggle value={gitHost} disabled={message.approving} onChange={onGitHostChange} />
+      ) : null}
       <div className="flex flex-dir-row flex-wrap studio-stack-sm">
         <button type="button" className="primary" disabled={message.approving} onClick={onApprove}>
           {message.approving
-            ? message.createMr
-              ? 'Writing → MR…'
+            ? createMr
+              ? `Writing → ${gitHost === 'github' ? 'PR' : 'MR'}…`
               : 'Applying…'
-            : message.createMr
-              ? 'Approve & open MR'
+            : createMr
+              ? `Approve & open ${gitHost === 'github' ? 'PR' : 'MR'}`
               : 'Approve (local)'}
         </button>
         <button
